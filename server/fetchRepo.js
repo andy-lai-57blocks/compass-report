@@ -1,31 +1,32 @@
-const GITHUB_API_BASE = 'https://api.github.com/repos/57blocks/Compass/contents';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-let GITHUB_TOKEN = process.env.GITHUB_TOKEN || '';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-async function githubFetch(url) {
-  const headers = { 'Accept': 'application/vnd.github.v3+json' };
-  if (GITHUB_TOKEN) headers['Authorization'] = `Bearer ${GITHUB_TOKEN}`;
-  const res = await fetch(url, { headers });
-  if (res.status === 403) throw new Error(`GitHub API rate limit exceeded`);
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`GitHub API error ${res.status}: ${text.substring(0, 200)}`);
-  }
-  return res.json();
+const LOCAL_REPO_PATH = '/Users/57block/57blocks/Compass';
+
+async function fetchDir(dirPath) {
+  const fullPath = path.join(LOCAL_REPO_PATH, dirPath);
+  const items = fs.readdirSync(fullPath, { withFileTypes: true });
+  return items
+    .filter(item => item.name !== '.gitkeep' && item.name !== '.DS_Store')
+    .map(item => ({
+      name: item.name,
+      path: dirPath ? `${dirPath}/${item.name}` : item.name,
+      type: item.isDirectory() ? 'dir' : 'file',
+      size: item.isFile() ? fs.statSync(path.join(fullPath, item.name)).size : 0,
+    }));
 }
 
-async function fetchDir(path) {
-  const url = `${GITHUB_API_BASE}/${path.split('/').map(p => encodeURIComponent(p)).join('/')}`;
-  return githubFetch(url);
-}
-
-async function fetchFileContent(path) {
-  const url = `${GITHUB_API_BASE}/${path.split('/').map(p => encodeURIComponent(p)).join('/')}`;
-  const data = await githubFetch(url);
-  if (data.content) {
-    return Buffer.from(data.content.replace(/\n/g, ''), 'base64').toString('utf-8');
+async function fetchFileContent(filePath) {
+  const fullPath = path.join(LOCAL_REPO_PATH, filePath);
+  try {
+    return fs.readFileSync(fullPath, 'utf-8');
+  } catch {
+    return '';
   }
-  return '';
 }
 
 function extractOwner(content) {

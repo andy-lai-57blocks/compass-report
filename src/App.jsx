@@ -152,7 +152,9 @@ function App() {
                       <td>{avgAi != null ? <span className={`quality-badge ${avgAi >= 70 ? 'high' : avgAi >= 40 ? 'medium' : 'low'}`}>{avgAi}</span> : <span style={{color:'#9ca3af'}}>—</span>}</td>
                       <td>{avgCombined != null ? <strong style={{color: '#7c3aed'}}>{avgCombined}</strong> : <span style={{color:'#9ca3af'}}>—</span>}</td>
                       <td style={{ fontSize: 12 }}>
-                        {stats.ownerCount && Object.entries(stats.ownerCount).slice(0, 3).map(([name, count]) => (
+                        {stats.ownerCount && Object.entries(stats.ownerCount)
+                          .sort((a, b) => b[1] - a[1])
+                          .slice(0, 3).map(([name, count]) => (
                           <span key={name} className="mini-badge" style={{ marginRight: 4 }}>
                             {name}: {count}
                           </span>
