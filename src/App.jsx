@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { getReport, triggerReanalysis, subscribeProgress } from './services/githubApi';
+import { useState, useEffect } from 'react';
+import { getReport } from './services/githubApi';
 import TreeView from './components/TreeView';
 import DetailTable from './components/DetailTable';
 import AiAnalysisPanel from './components/AiAnalysisPanel';
@@ -8,39 +8,21 @@ import './App.css';
 function App() {
   const [reportData, setReportData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [progress, setProgress] = useState('Loading report...');
   const [error, setError] = useState('');
-  const [analyzedAt, setAnalyzedAt] = useState(null);
-  const [serverStatus, setServerStatus] = useState('');
-  const [showBackdoor, setShowBackdoor] = useState(false);
-  const titleClickCount = useRef(0);
 
-  // On mount: fetch the cached report from the backend
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
       try {
-        setProgress('Fetching report from server...');
-        const result = await getReport();
-        if (cancelled) return;
-
-        if (result.status === 'ready') {
-          setReportData(result.report);
-          setAnalyzedAt(result.report.generatedAtFormatted);
-          setServerStatus(`Last analyzed: ${result.report.generatedAtFormatted}`);
-          setProgress('');
+        const data = await getReport();
+        if (!cancelled) {
+          setReportData(data);
           setLoading(false);
-        } else if (result.status === 'not_ready') {
-          // Server is starting up or hasn't analyzed yet
-          setServerStatus(result.analysisStatus?.progress || 'Server is initializing...');
-          setProgress(result.analysisStatus?.progress || 'Waiting for initial analysis...');
-          // Poll until ready
-          pollForReport();
         }
       } catch (err) {
         if (!cancelled) {
-          setError(`Cannot connect to backend server at http://localhost:3001. Make sure it's running.`);
+          setError(err.message);
           setLoading(false);
         }
       }
@@ -50,144 +32,19 @@ function App() {
     return () => { cancelled = true; };
   }, []);
 
-  function pollForReport() {
-    const interval = setInterval(async () => {
-      try {
-        const result = await getReport();
-        if (result.status === 'ready') {
-          setReportData(result.report);
-          setAnalyzedAt(result.report.generatedAtFormatted);
-          setServerStatus(`Last analyzed: ${result.report.generatedAtFormatted}`);
-          setProgress('');
-          setLoading(false);
-          clearInterval(interval);
-        } else if (result.analysisStatus?.error) {
-          setError(result.analysisStatus.error);
-          setLoading(false);
-          clearInterval(interval);
-        } else {
-          setProgress(result.analysisStatus?.progress || 'Waiting...');
-          setServerStatus(result.analysisStatus?.progress || '');
-        }
-      } catch {
-        clearInterval(interval);
-      }
-    }, 2000);
-  }
-
-  // Handle re-analysis
-  const handleReanalyze = async () => {
-    try {
-      setLoading(true);
-      setError('');
-      setProgress('Triggering server re-analysis...');
-
-      await triggerReanalysis();
-
-      // Subscribe to SSE progress
-      const unsubscribe = subscribeProgress((status) => {
-        setProgress(status.progress || 'Analyzing...');
-        setServerStatus(status.progress || '');
-        if (status.error) {
-          setError(status.error);
-          setLoading(false);
-          unsubscribe();
-        }
-        if (!status.running) {
-          // Analysis done, refresh report
-          setTimeout(async () => {
-            try {
-              const result = await getReport();
-              if (result.status === 'ready') {
-                setReportData(result.report);
-                setAnalyzedAt(result.report.generatedAtFormatted);
-                setServerStatus(`Last analyzed: ${result.report.generatedAtFormatted}`);
-              }
-            } catch {}
-            setLoading(false);
-          }, 1000);
-        }
-      });
-    } catch (err) {
-      setError(err.message);
-      setLoading(false);
-    }
-  };
-
-  // Secret: click title 5 times to show admin backdoor
-  const handleTitleClick = () => {
-    titleClickCount.current++;
-    if (titleClickCount.current >= 5) {
-      setShowBackdoor(true);
-      titleClickCount.current = 0;
-    }
-  };
-
-  const handleSecretRefresh = () => {
-    handleReanalyze();
-    setShowBackdoor(false);
-  };
-
   return (
     <div className="app">
       <header className="app-header">
-        <h1 onClick={handleTitleClick} style={{ cursor: 'pointer', userSelect: 'none' }}>
+        <h1 style={{ userSelect: 'none' }}>
           Compass Repository Report
         </h1>
         <p className="subtitle">
           Hierarchical analysis of 57Blocks' institutional knowledge layer — Firm-Wide Conventions,
           Vertical Domain Knowledge, and Engagement Patterns
         </p>
-
-        <div className="header-actions">
-          {serverStatus && (
-            <span className="analyzed-at">{serverStatus}</span>
-          )}
-          
-        </div>
-
-        {/* Backdoor admin panel */}
-        {showBackdoor && (
-          <div style={{
-            marginTop: 12,
-            padding: '8px 16px',
-            backgroundColor: '#fef2f2',
-            border: '1px solid #fecaca',
-            borderRadius: 8,
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 12,
-            fontSize: 13,
-          }}>
-            <span style={{ fontWeight: 600, color: '#dc2626' }}>🔐 Admin Backdoor</span>
-            <button
-              onClick={handleSecretRefresh}
-              style={{
-                padding: '4px 12px',
-                backgroundColor: '#dc2626',
-                color: 'white',
-                border: 'none',
-                borderRadius: 6,
-                fontWeight: 600,
-                cursor: 'pointer',
-                fontSize: 12,
-              }}
-            >
-              🔄 Force Server Re-analysis
-            </button>
-            <button
-              onClick={() => setShowBackdoor(false)}
-              style={{
-                padding: '4px 8px',
-                backgroundColor: 'transparent',
-                color: '#9ca3af',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: 16,
-              }}
-            >
-              ✕
-            </button>
+        {reportData && (
+          <div className="header-actions">
+            <span className="analyzed-at">Last analyzed: {reportData.generatedAtFormatted}</span>
           </div>
         )}
       </header>
@@ -197,7 +54,7 @@ function App() {
           <div className="progress-bar">
             <div className="progress-fill" />
           </div>
-          <p className="progress-text">{progress}</p>
+          <p className="progress-text">Loading report...</p>
         </div>
       )}
 
@@ -205,7 +62,7 @@ function App() {
         <div className="error-banner">
           <strong>Error:</strong> {error}
           <div style={{ marginTop: 8, fontSize: 13 }}>
-            Make sure the backend server is running: <code>cd server && node index.js</code>
+            Make sure <code>public/report.json</code> exists. Run <code>npm run report</code> to generate it.
           </div>
         </div>
       )}

@@ -1,11 +1,13 @@
 const API_BASE = 'http://localhost:3001';
 
 /**
- * Fetch the cached report from the backend server.
+ * Load the report from the static JSON file in public/.
+ * In development: Vite serves public/ as static assets.
+ * In production (Vercel): report.json is copied alongside the build.
  */
 export async function getReport() {
-  const res = await fetch(`${API_BASE}/api/report`);
-  if (!res.ok) throw new Error(`Server error: ${res.status}`);
+  const res = await fetch('/report.json');
+  if (!res.ok) throw new Error(`Failed to load report: ${res.status}`);
   return res.json();
 }
 
@@ -44,3 +46,4 @@ export function subscribeProgress(onStatus) {
   eventSource.onerror = () => {};
   return () => eventSource.close();
 }
+
